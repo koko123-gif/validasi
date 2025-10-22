@@ -84,6 +84,7 @@ export function parseMoqueryOutput(input: string): PathAttachment[] {
       const pathName = pathMatch ? pathMatch[1] : '';
 
       if (vlan && pathName) {
+        console.log(`Parsed moquery: VLAN=${vlan}, Path=${pathName}, EPG=${epg}`);
         attachments.push({
           vlan,
           epg,
@@ -94,6 +95,7 @@ export function parseMoqueryOutput(input: string): PathAttachment[] {
     }
   }
 
+  console.log('Total parsed moquery attachments:', attachments.length);
   return attachments;
 }
 
@@ -104,17 +106,24 @@ export function validateVlanAllowances(
   const results: ValidationResult[] = [];
 
   // Buat Set dari path yang ada di moquery dengan VLAN yang sesuai
+  const filteredAttachments = pathAttachments.filter(att => att.vlan === endpointData.vlan);
   const allowedPaths = new Set(
-    pathAttachments
-      .filter(att => att.vlan === endpointData.vlan)
-      .map(att => normalizePathName(att.path))
+    filteredAttachments.map(att => normalizePathName(att.path))
   );
+
+  // Debug logging
+  console.log('Endpoint VLAN:', endpointData.vlan);
+  console.log('Endpoint Paths:', endpointData.paths);
+  console.log('Filtered Attachments for VLAN:', filteredAttachments);
+  console.log('Allowed Paths Set:', Array.from(allowedPaths));
 
   // Validasi setiap path dari endpoint
   for (const path of endpointData.paths) {
     const normalizedPath = normalizePathName(path);
     // Path dianggap "allowed" jika ada di kedua input (endpoint DAN moquery)
     const isAllowed = allowedPaths.has(normalizedPath);
+
+    console.log(`Checking path: "${path}" (normalized: "${normalizedPath}") -> ${isAllowed ? 'ALLOWED' : 'NOT ALLOWED'}`);
 
     results.push({
       path,
@@ -129,8 +138,8 @@ export function validateVlanAllowances(
 
 // Normalisasi nama path untuk memastikan perbandingan yang konsisten
 function normalizePathName(path: string): string {
-  // Hapus whitespace dan ubah ke lowercase untuk perbandingan
-  return path.trim().toLowerCase();
+  // Hapus whitespace, kurung siku, dan ubah ke lowercase untuk perbandingan
+  return path.trim().replace(/[\[\]]/g, '').toLowerCase();
 }
 
 export function generateCSV(
