@@ -71,11 +71,23 @@ function App() {
         return entry;
       }
 
-      const validationResults = validateVlanAllowances(parsedEndpoint, parsedMoquery);
+      // Extract VLAN from user-provided EPG name
+      const vlanFromEpg = extractVlanFromEpg(entry.epgName);
+      if (!vlanFromEpg) {
+        return entry;
+      }
+
+      // Override endpoint VLAN with the one from EPG name
+      const endpointWithCorrectVlan = {
+        ...parsedEndpoint,
+        vlan: vlanFromEpg
+      };
+
+      const validationResults = validateVlanAllowances(endpointWithCorrectVlan, parsedMoquery);
       return {
         ...entry,
         results: validationResults,
-        endpointData: parsedEndpoint
+        endpointData: endpointWithCorrectVlan
       };
     });
 

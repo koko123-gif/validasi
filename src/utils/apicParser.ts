@@ -27,11 +27,13 @@ export function parseEndpointOutput(input: string): EndpointData | null {
   const pathSet = new Set<string>();
 
   for (const line of lines) {
+    // Extract VLAN
     const vlanMatch = line.match(/vlan-(\d+)/i);
     if (vlanMatch) {
       vlan = vlanMatch[1];
     }
 
+    // Extract Node to determine pod
     const nodeMatch = line.match(/Node\s*\n\s*(\d+)\s+(\d+)/);
     if (nodeMatch) {
       const node1 = parseInt(nodeMatch[1]);
@@ -39,12 +41,26 @@ export function parseEndpointOutput(input: string): EndpointData | null {
         pod = 'pod-2';
       } else if (node1 >= 300) {
         pod = 'pod-1';
+      } else if (node1 >= 200) {
+        pod = 'pod-2';
+      } else {
+        pod = 'pod-1';
       }
     }
 
-    const vpcMatch = line.match(/vpc\s+([\d-]+-VPC-[\d-]+-PG)/i);
+    // Extract VPC paths - support multiple formats
+    // Format 1: vpc 425-426-VPC-31-32-PG
+    let vpcMatch = line.match(/vpc\s+([\d-]+-VPC-[\d-]+-PG)/i);
     if (vpcMatch) {
       pathSet.add(vpcMatch[1]);
+    }
+
+    // Format 2: VPC path without "vpc" prefix
+    if (!vpcMatch) {
+      vpcMatch = line.match(/\b([\d-]+-[\d-]+-VPC-[\d-]+-[\d-]+-PG)\b/i);
+      if (vpcMatch) {
+        pathSet.add(vpcMatch[1]);
+      }
     }
   }
 
@@ -65,26 +81,29 @@ export function parseMoqueryOutput(input: string): PathAttachment[] {
   const attachments: PathAttachment[] = [];
 
   for (const line of lines) {
-    // Match protpaths (VPC)
-    let dnMatch = line.match(/dn\s*:\s*uni\/tn-[^\/]+\/ap-[^\/]+\/epg-([^\/]+)\/rspathAtt-\[topology\/(pod-\d+\/protpaths-[\d-]+\/pathep-\[[^\]]+\])\]/i);
+    // Skip empty lines
+    if (!line.trim()) continue;
 
+    // Match protpaths (VPC)
+    let dnMatch = line.match(/dn\s*:\s*uni\/tn-[^\/]+\/ap-[^\/]+\/epg-([^\/]+)\/rspathAtt-\[topology\/(pod-\d+\/protpaths-[\d-]+\/pathep-\[([^\]]+)\])\]/i);
+
+    let isVpc = true;
     // Match single paths (non-VPC)
     if (!dnMatch) {
-      dnMatch = line.match(/dn\s*:\s*uni\/tn-[^\/]+\/ap-[^\/]+\/epg-([^\/]+)\/rspathAtt-\[topology\/(pod-\d+\/paths-[\d]+\/pathep-\[[^\]]+\])\]/i);
+      dnMatch = line.match(/dn\s*:\s*uni\/tn-[^\/]+\/ap-[^\/]+\/epg-([^\/]+)\/rspathAtt-\[topology\/(pod-\d+\/paths-[\d]+\/pathep-\[([^\]]+)\])\]/i);
+      isVpc = false;
     }
 
     if (dnMatch) {
       const epg = dnMatch[1];
       const fullPath = dnMatch[2];
+      const pathName = dnMatch[3]; // Captured path name directly
 
+      // Extract VLAN from EPG name
       const vlanMatch = epg.match(/VLAN(\d+)/i);
       const vlan = vlanMatch ? vlanMatch[1] : '';
 
-      const pathMatch = fullPath.match(/pathep-\[([^\]]+)\]/);
-      const pathName = pathMatch ? pathMatch[1] : '';
-
       if (vlan && pathName) {
-        console.log(`Parsed moquery: VLAN=${vlan}, Path=${pathName}, EPG=${epg}`);
         attachments.push({
           vlan,
           epg,
@@ -95,7 +114,6 @@ export function parseMoqueryOutput(input: string): PathAttachment[] {
     }
   }
 
-  console.log('Total parsed moquery attachments:', attachments.length);
   return attachments;
 }
 
@@ -111,19 +129,11 @@ export function validateVlanAllowances(
     filteredAttachments.map(att => normalizePathName(att.path))
   );
 
-  // Debug logging
-  console.log('Endpoint VLAN:', endpointData.vlan);
-  console.log('Endpoint Paths:', endpointData.paths);
-  console.log('Filtered Attachments for VLAN:', filteredAttachments);
-  console.log('Allowed Paths Set:', Array.from(allowedPaths));
-
   // Validasi setiap path dari endpoint
   for (const path of endpointData.paths) {
     const normalizedPath = normalizePathName(path);
     // Path dianggap "allowed" jika ada di kedua input (endpoint DAN moquery)
     const isAllowed = allowedPaths.has(normalizedPath);
-
-    console.log(`Checking path: "${path}" (normalized: "${normalizedPath}") -> ${isAllowed ? 'ALLOWED' : 'NOT ALLOWED'}`);
 
     results.push({
       path,
