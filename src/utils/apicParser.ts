@@ -102,14 +102,19 @@ export function validateVlanAllowances(
   pathAttachments: PathAttachment[]
 ): ValidationResult[] {
   const results: ValidationResult[] = [];
+
+  // Buat Set dari path yang ada di moquery dengan VLAN yang sesuai
   const allowedPaths = new Set(
     pathAttachments
       .filter(att => att.vlan === endpointData.vlan)
-      .map(att => att.path)
+      .map(att => normalizePathName(att.path))
   );
 
+  // Validasi setiap path dari endpoint
   for (const path of endpointData.paths) {
-    const isAllowed = allowedPaths.has(path);
+    const normalizedPath = normalizePathName(path);
+    // Path dianggap "allowed" jika ada di kedua input (endpoint DAN moquery)
+    const isAllowed = allowedPaths.has(normalizedPath);
 
     results.push({
       path,
@@ -120,6 +125,12 @@ export function validateVlanAllowances(
   }
 
   return results;
+}
+
+// Normalisasi nama path untuk memastikan perbandingan yang konsisten
+function normalizePathName(path: string): string {
+  // Hapus whitespace dan ubah ke lowercase untuk perbandingan
+  return path.trim().toLowerCase();
 }
 
 export function generateCSV(
