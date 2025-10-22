@@ -170,15 +170,24 @@ export function generateCSV(
     pathMap.set(attachment.path, attachment.fullPath);
   }
 
-  const rows = notAllowedPaths.map(vpcPath => {
-    let fullPath = pathMap.get(vpcPath);
+  const rows = notAllowedPaths.map(pathName => {
+    let fullPath = '';
 
-    if (!fullPath) {
-      const protpathsMatch = vpcPath.match(/(\d+)-(\d+)-VPC/);
-      if (protpathsMatch) {
-        fullPath = `${endpointData.pod}/protpaths-${protpathsMatch[1]}-${protpathsMatch[2]}/pathep-[${vpcPath}]`;
+    // Check if it's a VPC path (format: XXX-YYY-VPC-...)
+    const vpcMatch = pathName.match(/(\d+)-(\d+)-VPC/);
+    if (vpcMatch) {
+      const node1 = vpcMatch[1];
+      const node2 = vpcMatch[2];
+      fullPath = `${endpointData.pod}/protpaths-${node1}-${node2}/pathep-[${pathName}]`;
+    } else {
+      // Single path (format: node-port)
+      const singleMatch = pathName.match(/^(\d+)[-\/]/);
+      if (singleMatch) {
+        const node = singleMatch[1];
+        fullPath = `${endpointData.pod}/paths-${node}/pathep-[${pathName}]`;
       } else {
-        fullPath = `${endpointData.pod}/protpaths-XXX-XXX/pathep-[${vpcPath}]`;
+        // Fallback
+        fullPath = `${endpointData.pod}/paths-XXX/pathep-[${pathName}]`;
       }
     }
 

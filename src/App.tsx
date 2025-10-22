@@ -101,22 +101,27 @@ function App() {
       if (entry.results && entry.endpointData) {
         const notAllowed = entry.results.filter(r => r.status === 'not_allowed');
         if (notAllowed.length > 0) {
-          const pathMap = new Map<string, string>();
-          for (const attachment of pathAttachments) {
-            pathMap.set(attachment.path, attachment.fullPath);
-          }
-
           const vlanNumber = extractVlanFromEpg(entry.epgName) || entry.endpointData!.vlan;
           const epgFormatted = entry.epgName.toLowerCase().startsWith('epg-') ? entry.epgName : `epg-${entry.epgName}`;
 
           notAllowed.forEach(result => {
-            let fullPath = pathMap.get(result.path);
+            // Generate full path in moquery format
+            let fullPath = '';
 
-            if (!fullPath) {
-              const protpathsMatch = result.path.match(/(\d+)-(\d+)-VPC/);
-              if (protpathsMatch) {
-                fullPath = `${entry.endpointData!.pod}/protpaths-${protpathsMatch[1]}-${protpathsMatch[2]}/pathep-[${result.path}]`;
+            // Check if it's a VPC path (format: XXX-YYY-VPC-...)
+            const vpcMatch = result.path.match(/(\d+)-(\d+)-VPC/);
+            if (vpcMatch) {
+              const node1 = vpcMatch[1];
+              const node2 = vpcMatch[2];
+              fullPath = `${entry.endpointData!.pod}/protpaths-${node1}-${node2}/pathep-[${result.path}]`;
+            } else {
+              // Single path (format: node-port)
+              const singleMatch = result.path.match(/^(\d+)[-\/]/);
+              if (singleMatch) {
+                const node = singleMatch[1];
+                fullPath = `${entry.endpointData!.pod}/paths-${node}/pathep-[${result.path}]`;
               } else {
+                // Fallback
                 fullPath = `${entry.endpointData!.pod}/paths-XXX/pathep-[${result.path}]`;
               }
             }
